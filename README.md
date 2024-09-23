@@ -1,6 +1,6 @@
 # FIND
 Code for paper: FIND: Fine-tuning Initial Noise Distribution with Policy Optimization for Diffusion Models (ACMMM 2024)
-([Arxiv](https://arxiv.org/abs/2305.16381)) ([Website](https://vpx-ecnu.github.io/FIND-website)).
+([Arxiv](https://arxiv.org/abs/2407.19453)) ([Website](https://vpx-ecnu.github.io/FIND-website)).
 ![](./fig1_page-0001.jpg)
 
 ## Env Installation

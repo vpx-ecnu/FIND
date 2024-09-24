@@ -913,7 +913,7 @@ def _collect_rollout(args, pipe, is_ddp, batch, calculate_reward, state_dict, my
           log_prob_list,
           _,
       ) = pipe.forward_collect_traj_ddim(prompt=batch, is_ddp=is_ddp, myModel=myModel)
-      # pdb.set_trace()
+    #   pdb.set_trace()
       reward_list = []
       txt_emb_list = []
       for i in range(len(batch)):
@@ -1344,6 +1344,7 @@ def main():
 
   # In distributed training, the load_dataset function guarantees that only one
   # local process can concurrently download the dataset.
+#   breakpoint()
   if args.dataset_name is not None:
     # Downloading and loading a dataset from the hub.
     load_dataset(
@@ -1373,7 +1374,7 @@ def main():
     for i in range(0, len(data), batch_size):
       batch = data[i : i + batch_size]
       yield batch
-
+#   breakpoint()
   data_iterator = _my_data_iterator(prompt_list, batch_size=args.g_batch_size)
   data_iterator = accelerator.prepare(data_iterator)
 

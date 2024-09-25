@@ -921,9 +921,9 @@ def _collect_rollout(args, pipe, is_ddp, batch, calculate_reward, state_dict, my
         reward_list.append(reward)
         txt_emb_list.append(txt_emb)
     #   breakpoint()
-      with open('/data2/ccg/workspace/mydpok2/reward2.txt', 'a') as file:
-    # 写入一行数据，末尾加上换行符
-        file.write(f"{reward_list[0].item()}\n")
+    #   with open('/data2/ccg/workspace/mydpok2/reward2.txt', 'a') as file:
+    # # 写入一行数据，末尾加上换行符
+    #     file.write(f"{reward_list[0].item()}\n")
       reward_list = torch.stack(reward_list).detach().cpu()
       txt_emb_list = torch.stack(txt_emb_list).detach().cpu()
       state_dict["init_noise"] = init_noise

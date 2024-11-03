@@ -28,8 +28,6 @@ import random
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed  # pylint: disable=g-multiple-import
-import datasets
-from datasets import load_dataset
 import diffusers
 from diffusers import UNet2DConditionModel
 from diffusers.loaders import AttnProcsLayers
@@ -554,11 +552,6 @@ def parse_args():
   if env_local_rank != -1 and env_local_rank != args.local_rank:
     args.local_rank = env_local_rank
 
-  # # Sanity checks
-  # if args.dataset_name is None and args.train_data_dir is None:
-  #     raise ValueError("Need either a dataset name or a training folder.")
-
-  # default to using the same revision for the non-ema model if not specified
   if args.non_ema_revision is None:
     args.non_ema_revision = args.revision
 
@@ -822,6 +815,7 @@ def _calculate_reward_custom(
 
 def _get_batch(data_iter_loader, data_iterator, prompt_list, args, accelerator):
   """Creates a batch."""
+#   breakpoint()
   batch = next(data_iter_loader, None)
   if batch is None:
     batch = next(
@@ -884,25 +878,10 @@ def _save_model(args, count, is_ddp, accelerator, myModel, pipe, prompt):
         
         image.save(f"{img_path}/{i}.png")
   
-#   pdb.set_trace()
-#   if is_ddp:
-#     unet_to_save = copy.deepcopy(accelerator.unwrap_model(unet)).to(
-#         torch.float32
-#     )
-#     unet_to_save.save_attn_procs(save_path)
-#   else:
-#     unet_to_save = copy.deepcopy(unet).to(torch.float32)
-#     unet_to_save.save_attn_procs(save_path)
 
 
 def _collect_rollout(args, pipe, is_ddp, batch, calculate_reward, state_dict, myModel):
-  """diffusion forward 收集数据 Collects trajectories."""
   for _ in range(args.g_step):
-    # pdb.set_trace()
-    # samples for each prompt
-    # collect the rollout data from the custom sampling function
-    # (modified in pipeline_stable_diffusion.py and scheduling_ddim.py)
-    # diffusion forward 收集数据
     with torch.no_grad():
       (
           init_noise,
@@ -920,10 +899,6 @@ def _collect_rollout(args, pipe, is_ddp, batch, calculate_reward, state_dict, my
         reward, txt_emb = calculate_reward(image[i], batch[i])
         reward_list.append(reward)
         txt_emb_list.append(txt_emb)
-    #   breakpoint()
-    #   with open('/data2/ccg/workspace/mydpok2/reward2.txt', 'a') as file:
-    # # 写入一行数据，末尾加上换行符
-    #     file.write(f"{reward_list[0].item()}\n")
       reward_list = torch.stack(reward_list).detach().cpu()
       txt_emb_list = torch.stack(txt_emb_list).detach().cpu()
       state_dict["init_noise"] = init_noise
@@ -1045,20 +1020,6 @@ def _train_policy_func(
     old_mean = state_dict["old_mean"]
     old_std = state_dict["old_std"]
     old_log_prob = get_log_prob(old_mean, old_std, init_noise)
-  # calculate loss from the custom function
-  # (modified in pipeline_stable_diffusion.py and scheduling_ddim.py)
-#   log_prob, kl_regularizer = pipe.forward_calculate_logprob(
-#       prompt_embeds=batch_promt_embeds.cuda(),
-#       latents=batch_state.cuda(),
-#       next_latents=batch_next_state.cuda(),
-#       ts=batch_timestep.cuda(),
-#       mean_copy=mean_copy,
-#       std_copy=std_copy,
-#       is_ddp=is_ddp,
-#       mean=mean,
-#       std=std
-#   )
-  # pdb.set_trace()
   log_prob, kl_regularizer = myModel(2, init_noise)
   state_dict["last_log_prob"] = log_prob.detach()
   
@@ -1072,8 +1033,6 @@ def _train_policy_func(
     else:
       adv = batch_final_reward.cuda().reshape([args.p_batch_size, 1])
   ratio = torch.exp(log_prob - old_log_prob.cuda())
-  # ratio = torch.exp(log_prob) # 简化版
-  # pdb.set_trace()
   print(f"ratio: {ratio}")
   ratio = torch.clamp(ratio, 1.0 - args.ratio_clip, 1.0 + args.ratio_clip)
   
@@ -1126,11 +1085,9 @@ def main():
   )
   logger.info(accelerator.state, main_process_only=False)
   if accelerator.is_local_main_process:
-    datasets.utils.logging.set_verbosity_warning()
     transformers.utils.logging.set_verbosity_warning()
     diffusers.utils.logging.set_verbosity_info()
   else:
-    datasets.utils.logging.set_verbosity_error()
     transformers.utils.logging.set_verbosity_error()
     diffusers.utils.logging.set_verbosity_error()
 
@@ -1251,32 +1208,6 @@ def main():
           "xformers is not available. Make sure it is installed correctly"
       )
 
-  # Define lora layers
-  # lora_attn_procs = {}
-  # for name in unet.attn_processors.keys():
-  #   cross_attention_dim = (
-  #       None
-  #       if name.endswith("attn1.processor")
-  #       else unet.config.cross_attention_dim
-  #   )
-  #   if name.startswith("mid_block"):
-  #     hidden_size = unet.config.block_out_channels[-1]
-  #   elif name.startswith("up_blocks"):
-  #     block_id = int(name[len("up_blocks.")])
-  #     hidden_size = list(reversed(unet.config.block_out_channels))[block_id]
-  #   elif name.startswith("down_blocks"):
-  #     block_id = int(name[len("down_blocks.")])
-  #     hidden_size = unet.config.block_out_channels[block_id]
-
-  #   lora_attn_procs[name] = LoRACrossAttnProcessor(
-  #       hidden_size=hidden_size,
-  #       cross_attention_dim=cross_attention_dim,
-  #       rank=args.lora_rank,
-  #   )
-
-  # unet.set_attn_processor(lora_attn_procs)
-  # lora_layers = AttnProcsLayers(unet.attn_processors)
-
   # Enable TF32 for faster training on Ampere GPUs,
   # cf https://pytorch.org/docs/stable/notes/cuda.
   # html#tensorfloat-32-tf32-on-ampere-devices
@@ -1306,29 +1237,6 @@ def main():
     optimizer_cls = torch.optim.AdamW
     
   myModel = MyModel().cuda()
-  
-  # pdb.set_trace()
-  
-  myModel_copy = MyModel().cuda()
-    
-  # mean = torch.zeros((1, 4, 64, 64), requires_grad=True, device="cuda")
-  
-  # std = torch.ones((1, 4, 64, 64), requires_grad=True, device="cuda")
-  
-#   dist = Normal(mean, std)
-
-#   init_noise = nn.Parameter(torch.randn((1, 4, 64, 64), device="cuda"))
-  # pdb.set_trace()
-  
-  # mean_copy = mean.clone()
-  
-  # std_copy = std.clone()
-  
-  # mean_copy = mean_copy.detach()
-  
-  # std_copy = std_copy.detach()
-  
-#   init_noise_copy = init_noise_copy.detach()
 
   optimizer = optimizer_cls(
       myModel.parameters(),
@@ -1337,46 +1245,6 @@ def main():
       weight_decay=args.adam_weight_decay,
       eps=args.adam_epsilon,
   )
-
-  # Get the datasets: you can either provide your own training and evaluation
-  # files (see below) or specify a Dataset from the hub (the dataset will be
-  # downloaded automatically from the datasets Hub).
-
-  # In distributed training, the load_dataset function guarantees that only one
-  # local process can concurrently download the dataset.
-#   breakpoint()
-  if args.dataset_name is not None:
-    # Downloading and loading a dataset from the hub.
-    load_dataset(
-        args.dataset_name,
-        args.dataset_config_name,
-        cache_dir=args.cache_dir,
-    )
-  else:
-    with open(args.prompt_path) as json_file:
-      prompt_dict = json.load(json_file)
-    if args.prompt_category != "all":
-      prompt_category = [e for e in args.prompt_category.split(",")]
-    prompt_list = []
-    for prompt in prompt_dict:
-      category = prompt_dict[prompt]["category"]
-      if args.prompt_category != "all":
-        if category in prompt_category:
-          prompt_list.append(prompt)
-      else:
-        prompt_list.append(prompt)
-
-  # Data iterator for prompt dataset
-  def _my_data_iterator(data, batch_size):
-    # Shuffle the data randomly
-    random.shuffle(data)
-
-    for i in range(0, len(data), batch_size):
-      batch = data[i : i + batch_size]
-      yield batch
-#   breakpoint()
-  data_iterator = _my_data_iterator(prompt_list, batch_size=args.g_batch_size)
-  data_iterator = accelerator.prepare(data_iterator)
 
   lr_scheduler = get_scheduler(
       args.lr_scheduler,
@@ -1400,7 +1268,6 @@ def main():
     myModel, optimizer, lr_scheduler = accelerator.prepare(
         myModel, optimizer, lr_scheduler
     )
-  # pdb.set_trace()
   if args.use_ema:
     ema_unet.to(accelerator.device)
 
@@ -1515,28 +1382,20 @@ def main():
   count = 0
   buffer_size = args.buffer_size
   policy_steps = args.gradient_accumulation_steps * args.p_step
-  # test_batch = get_test_prompts(args.prompt_category)
-  data_iter_loader = iter(data_iterator)
+#   data_iter_loader = iter(data_iterator)
   is_ddp = isinstance(unet, DistributedDataParallel)
   pipe.unet = unet
   print("model is parallel:", is_ddp)
   t1 = time.time()
-  #  核心训练代码
   for count in range(0, args.max_train_steps):
     # fix batchnorm
     unet.eval()
-
-    # 更新buffer s,a,r
-    batch = _get_batch(
-        data_iter_loader, _my_data_iterator, prompt_list, args, accelerator
-    )
-    # pdb.set_trace()
+    batch = [args.single_prompt]
     _collect_rollout(args, pipe, is_ddp, batch, calculate_reward, state_dict, myModel)
     _trim_buffer(buffer_size, state_dict)
 
     if args.v_flag == 1:
       tot_val_loss = 0
-      # 更新v，mse loss
       value_optimizer.zero_grad()
       
       for v_step in range(args.v_step):
@@ -1552,7 +1411,6 @@ def main():
       value_optimizer.step()
       value_optimizer.zero_grad()
       
-    #   breakpoint()
       if accelerator.is_main_process:
         print("value_loss", tot_val_loss)
         accelerator.log({"value_loss": tot_val_loss}, step=count)
@@ -1591,10 +1449,6 @@ def main():
                 myModel
             )
     
-#   if accelerator.sync_gradients:
-#     norm = accelerator.clip_grad_norm_(init_noise, args.clip_norm)
-#   tpfdata.tot_grad_norm += norm.item() / args.p_step
-    # print(mean)
     state_dict["mean"] = myModel.mean.data.clone()
     state_dict["std"] = myModel.std.data.clone()
     optimizer.step()
